@@ -1,26 +1,27 @@
-[BITS 16]
-[ORG 0x7E00]
+[BITS 16] ;; REAL MODE!!!
+[ORG 0x7E00] ;; ROOMMATES WITH BOOT.ASM (0x7C00)
 
 main:
-    xor ax, ax
-    mov ds, ax
+    XOR AX, AX ;; AX = 0
+    MOV DS, AX ;; DS = 0 0x0000:
+    MOV ES, AX ;; ES = 0 0x0000
 
-    mov si, msg
-    call print
+    MOV SI, msg ;; MSG FOR YOU
+    CALL print ;; PRINT IT
 
 hang:
-    hlt
-    jmp hang
+    HLT ;; HALT
+    JMP hang ;; YOU SHALL NOT PASS
 
 print:
-    lodsb
-    test al, al
-    je .done
-    mov ah, 0x0E
-    mov bh, 0
-    int 0x10
-    jmp print
+    LODSB ;; LOAD FROM SI
+    TEST AL, AL ;; IF AL = 0 CONT BELOW
+    JE .done ;; JUMP TO .DONE CONT ABOVE
+    MOV AH, 0x0E ;; PRINT
+    MOV BH, 0 ;; THE
+    INT 0x10 ;; LINE
+    JMP print ;; LOOP
 .done:
-    ret
+    RET ;; RETURN TO FUNC THAT CALLED IT
 
-msg db "test!", 0
+msg DB "test!", 0 ;; MSG
