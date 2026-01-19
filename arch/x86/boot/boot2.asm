@@ -11,6 +11,8 @@ main:
     XOR AX, AX ;; AX = 0
     MOV DS, AX ;; DS = 0 0x0000:
     MOV ES, AX ;; ES = 0 0x0000
+    MOV AX, 0x0003 ;; SET VGA TO TEXT MODE
+    INT 0x10 ;; INTERUPT ME
     
     LGDT [gdt_descriptor] ;; LOAD THIS GDT
 

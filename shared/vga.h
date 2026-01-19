@@ -1,17 +1,22 @@
-#include <stdint.h>
-#include "helpers/libc/strings.h"
+#ifndef VGA_H
+#define VGA_H
 
+#include <stdint.h>
+
+// VGA Width/Height
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
-#define VGA_MEMORY ((volatile char*)0xB8000)
-#define VGA_CURSOR_PORT_INDEX 0x3D4
-#define VGA_CURSOR_PORT_DATA  0x3D5
-extern int vga_column;
-extern int vga_row;
 
-void outb(uint16_t port, uint8_t val);
-void set_cursor(int x, int y);
-void reset_cursor(void);
-void clear_screen(void);
-void print(int color, const char *string);
+// Space in memory
+#define VGA_MEMORY ((volatile uint16_t*)0xB8000)
 
+// Black and white helpers
+#define VGA_COLOR_BLACK 0x0
+#define VGA_COLOR_WHITE 0xF
+
+// VGA Helpers
+void vga_clear(void);
+void vga_putc(char c, uint8_t color);
+void vga_print(const char* s, uint8_t color);
+
+#endif

@@ -1,49 +1,50 @@
 #include "vga.h"
 
-int vga_column = 0;
-int vga_row = 0;
+// Cursor row/column
+static uint16_t cursor_row = 0;
+static uint16_t cursor_col = 0;
 
-void outb(uint16_t port, uint8_t val)
+// Print 1 character to VGA
+static inline uint16_t vga_entry(char c, uint8_t color)
 {
-    asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
+    return (uint16_t)c | ((uint16_t)color << 8);
 }
 
-void set_cursor(int x, int y)
+// Clear VGA
+void vga_clear(void)
 {
-    uint16_t pos = y * 80 + x;
-    outb(VGA_CURSOR_PORT_INDEX, 0x0F);
-    outb(VGA_CURSOR_PORT_DATA, pos & 0xFF);
-    outb(VGA_CURSOR_PORT_INDEX, 0x0E);
-    outb(VGA_CURSOR_PORT_DATA, (pos >> 8) & 0xFF);
+    for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
+        VGA_MEMORY[i] = vga_entry(' ', VGA_COLOR_WHITE);
+    }
+
+    cursor_row = 0;
+    cursor_col = 0;
 }
 
-void reset_cursor(void)
+// Better printing stuff to VGA
+void vga_putc(char c, uint8_t color)
 {
-    set_cursor(0, 0);
-}
+    if (c == '\n') {
+        cursor_col = 0;
+        cursor_row++;
+        return;
+    }
 
-void print(int color, const char* msg)
-{
-    reset_cursor();
-    volatile char* vga = (volatile char*)0xB8000;
-    int i;
-    for (i = 0; msg[i]; i++) {
-    
-        vga[i * 2] = msg[i];
-        vga[i * 2 + 1] = color;
+    VGA_MEMORY[cursor_row * VGA_WIDTH + cursor_col] =
+        vga_entry(c, color);
+
+    cursor_col++;
+
+    if (cursor_col >= VGA_WIDTH) {
+        cursor_col = 0;
+        cursor_row++;
     }
 }
 
-void clear_screen(void)
+// Print a string
+void vga_print(const char* s, uint8_t color)
 {
-    for (int r = 0; r < VGA_HEIGHT; r++)
-    {
-        for (int c = 0; c < VGA_WIDTH; c++)
-        {
-            volatile char* vga = VGA_MEMORY + (r * VGA_WIDTH + c) * 2;
-            vga[0] = ' ';
-            vga[1] = 0x0F;
-        }
+    for (int i = 0; s[i]; i++) {
+        vga_putc(s[i], color);
     }
-    reset_cursor();
 }
