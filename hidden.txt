@@ -1,0 +1,232 @@
+Yes. Let’s do this cleanly, mechanically, and safely, exactly how real bootloaders do it.
+No magic, no skipped steps.
+
+We’ll assume BIOS + x86 + real mode → protected mode, which matches what you’re building.
+
+Goal (Very Clear)
+
+You want:
+
+BIOS to fill an E820 memory map
+
+That map stored in memory
+
+To pass a pointer + count into C
+
+C code can iterate it safely
+
+Big Picture Flow
+Stage 2 (ASM, real mode)
+  ├─ call BIOS E820
+  ├─ store entries in memory
+  ├─ store count
+  ├─ switch to protected mode
+  └─ call C with (map_ptr, count)
+
+Stage 3 (C)
+  └─ read and use the map
+
+Step 0: Choose a Safe Memory Location
+
+Pick low memory that:
+
+is not BIOS data
+
+is not your loader
+
+is identity-mapped later
+
+A very common choice:
+
+E820_MAP_ADDR   equ 0x8000
+E820_MAX_ENTRIES equ 64
+
+
+This gives you:
+
+64 × 24 bytes = 1536 bytes
+
+plenty for all machines
+
+Step 1: Define the E820 Entry Layout (ABI)
+
+This layout must match in ASM and C.
+
+// This is the canonical E820 layout
+struct e820_entry {
+    uint64_t base;
+    uint64_t length;
+    uint32_t type;
+    uint32_t acpi;
+} __attribute__((packed));
+
+
+Each entry is 24 bytes.
+
+Step 2: E820 Detection Code (REAL MODE ASM)
+
+This code runs before protected mode.
+
+[BITS 16]
+
+e820_detect:
+    xor ebx, ebx                    ; continuation value = 0
+    mov di, E820_MAP_ADDR
+    mov word [e820_count], 0
+
+.next:
+    mov eax, 0xE820
+    mov edx, 0x534D4150             ; 'SMAP'
+    mov ecx, 24                     ; size of entry
+    mov es, di >> 4
+    mov di, di & 0xF
+
+    int 0x15
+    jc .done                        ; carry = error / finished
+
+    cmp eax, 0x534D4150
+    jne .done
+
+    add di, 24
+    inc word [e820_count]
+
+    test ebx, ebx
+    jne .next
+
+.done:
+    ret
+
+Step 3: Store the Count Somewhere Stable
+e820_count dw 0
+
+
+You now have:
+
+E820 map at 0x8000
+
+Entry count in e820_count
+
+Step 4: Switch to Protected Mode (You Already Have This)
+
+Nothing special here — just make sure:
+
+identity mapping is used later
+
+A20 is enabled
+
+Step 5: Pass the Map to C (IMPORTANT PART)
+Calling convention (cdecl, 32-bit)
+
+Arguments go right to left on the stack.
+
+So we push:
+
+count
+
+pointer
+
+ASM: Call C Loader
+[BITS 32]
+
+extern c_loader
+
+pm_entry:
+    ; set up segments & stack first!
+    mov ax, DATA_SEG
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov esp, 0x9FC00
+
+    push dword [e820_count]
+    push dword E820_MAP_ADDR
+    call c_loader
+
+.hang:
+    cli
+    hlt
+    jmp .hang
+
+Step 6: C Loader Receives the Map
+#include <stdint.h>
+
+struct e820_entry {
+    uint64_t base;
+    uint64_t length;
+    uint32_t type;
+    uint32_t acpi;
+} __attribute__((packed));
+
+void c_loader(struct e820_entry* map, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++) {
+        if (map[i].type == 1) {
+            // usable RAM
+        }
+    }
+
+    for (;;);
+}
+
+
+If this loop runs → E820 passed correctly.
+
+Step 7: Minimal Debug Proof (Highly Recommended)
+
+Before doing anything fancy, prove it works.
+
+Print usable memory count
+uint32_t usable = 0;
+for (uint32_t i = 0; i < count; i++) {
+    if (map[i].type == 1)
+        usable++;
+}
+
+
+Write usable to VGA memory or debug port.
+
+Common Fatal Mistakes (Avoid These)
+
+❌ Calling E820 in protected mode
+❌ Not checking EAX == 'SMAP'
+❌ Forgetting to zero EBX initially
+❌ Overwriting the buffer later
+❌ Passing wrong pointer to C
+❌ Not packing the struct
+
+Sanity Check (What You Should See)
+
+A real machine / QEMU typically returns:
+
+6–15 entries
+
+One large usable region above 1 MiB
+
+Several reserved regions
+
+If you see 0 entries, your BIOS call didn’t work.
+
+What Comes Immediately After This
+
+Once E820 works, the next mandatory steps are:
+
+Physical memory allocator
+
+ELF kernel loader
+
+Paging
+
+boot_info struct
+
+At that point, you’re no longer “booting” — you’re initializing an OS.
+
+If you want next, I can:
+
+turn this into a bump allocator
+
+show how GRUB passes E820 (for comparison)
+
+help you design your boot_info ABI
+
+show how to load an ELF kernel using the map
+
+Just say which one.

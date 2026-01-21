@@ -13,7 +13,9 @@ main:
     MOV ES, AX ;; ES = 0 0x0000
     MOV AX, 0x0003 ;; SET VGA TO TEXT MODE
     INT 0x10 ;; INTERUPT ME
-    
+    MOV AX, 0x2401 ;; A20 Enable
+    INT 0x15 ;; INT FOR A20
+
     LGDT [gdt_descriptor] ;; LOAD THIS GDT
 
     MOV EAX, CR0 ;; EAX GETS CR0 CR0
