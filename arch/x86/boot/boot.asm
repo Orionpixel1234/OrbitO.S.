@@ -1,47 +1,66 @@
-[BITS 16] ;; SET TO REAL MODE BY BIOS
-[ORG 0x7C00] ;; SET TO BOOTLOADER ORIGIN
+[BITS 16] ;; SET BY BIOS REALMODE
+[ORG 0x7C00] ;; ORIGIN FOR BOOTLOADER
 
-start:
-    CLI ;;        S
-    XOR AX, AX ;; E
-    MOV DS, AX ;; T
-    MOV ES, AX ;; U
-    MOV SS, AX ;; P
-    MOV SP, 0x7A00 ; THE
-    STI ; STACK
-
+main:
+    CLI ;; NO INTERUPTS
+    XOR AX, AX ;; SET
+    MOV DS, AX ;; UP
+    MOV ES, AX ;; THE
+    MOV DS, AX ;; STACK
+    MOV SP, 0x7A00 ;; STACK POINTER
+    STI ;; MORE INTERUPTS
+    
     MOV [boot_drive], DL ;; SAVE BOOT DRIVE
 
-read_retry:
-    MOV AH, 0x42 ;; READ VIA LBA
-    MOV DL, [boot_drive] ;; GET BOOT DRIVE
-    MOV SI, dap ;; SET AS DISK ACCESS PACKET
-    INT 0x13 ;; READ DISK
-    JNC read_ok ;; READ IS OK
+read_drive:
+    ;; READ SECTORS FROM DRIVE
+    ;; INT 0x13
+    ;; AH = 0x42
+    ;; DL = [boot_drive]
+    ;; DS:SI = DAP
+    ;; SEE MORE @ https://en.wikipedia.org/wiki/INT_13H#INT_13h_AH=42h:_Extended_Read_Sectors_From_Drive
+    MOV AH, 0x42
+    MOV DL, [boot_drive]
+    MOV SI, dap
+    INT 0x13
+    JC .error
 
-    XOR AH, AH ;; RESET DISK
-    INT 0x13 ;; ALR THIS ONES OBVIOUS
+    JMP .read_ok
 
-    DEC BYTE [retries] ;; 3 RETRIES
-    JNZ read_retry ;; RETRY IF RETRIES < 0
+.error:
+    ;; RESET DISK
+    ;; INT 0x13
+    ;; AH = 0x00
+    ;; DL = [boot_drive]
+    ;; SEE MORE @ https://en.wikipedia.org/wiki/INT_13H#INT_13h_AH=00h:_Reset_Disk_System
+    XOR AH, AH
+    MOV DL, [boot_drive]
+    INT 0x13
+    JC halt
+    
+    ;; RETRY 5 TIMES
+    DEC BYTE [retries]
+    JNZ read_drive
 
-disk_error:
+.read_ok:
+    ;; JUMP TO BOOT NUM 2 (ASM ADAPTER)
+    JMP 0x0000:0x7E00
+
+halt:
     HLT ;; HALT
-    JMP disk_error ;; YOU SHALL NOT PASS
+    JMP halt ;; YOU SHALL NOT PASS
 
-read_ok:
-    JMP 0x0000:0x7E00 ;; READ IS OK CLEARED FOR HYPER JUMP
-
+;; SEE DEFINITION @ https://en.wikipedia.org/wiki/INT_13H#INT_13h_AH=42h:_Extended_Read_Sectors_From_Drive
 dap:
     DB 0x10 ;; SIZE
     DB 0 ;; RESERVED FOR RESERVATION (ON THE DISNEY MOBILE APP)
-    DW 4 ;; NUMBER OF SECTORS TO READ (4 SECTORS THATS ALOT OF PAGES!)
+    DW 4 ;; NUMBER OF SECTORS TO READ (4 SECTORS THATS ALOT TO READ!)
     DW 0x7E00 ;; OFFSET!!
     DW 0x0000 ;; SEGMENT!
-    DQ 1 ;; 64 BIT LBA (0 DOES NOT WORK AND I DONT WANT TO LOOK UP THE ANSWER CUZ ITS GOING TO TAKE UP HALF MY LIFETIME(USUALY))
+    DQ 1 ;; (0 DOES NOT WORK)
 
-boot_drive DB 0 ;; OBVIOUS
-retries    DB 3 ;; SAME AS ABOVE
+boot_drive DW 0 ;; BOOT DRIVE
+retries DB 5 ;; 5 RETRIES OF THE DISK READING
 
-TIMES 510-($-$$) DB 0 ;; PADDING FOR WHEN YOU FALL AND NOT USE THOSE 512 BYTES
-DW 0xAA55 ;; BOOT SIGNIATURE (WEIRD NAME HUH?)
+TIMES 510-($-$$) DB 0 ;; PADDING FOR WHEN YOU FALL
+DW 0xAA55 ;; BOOT SIGNATURE (WEIRD NAME HUH)
